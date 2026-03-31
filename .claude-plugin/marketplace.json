@@ -1,11 +1,11 @@
 {
-  "name": "openai-codex",
+  "name": "trunkszi-ai-review",
   "owner": {
-    "name": "OpenAI"
+    "name": "trunkszi"
   },
   "metadata": {
-    "description": "Codex plugins to use in Claude Code for delegation and code review.",
-    "version": "1.0.2"
+    "description": "Codex, Gemini, and Auggie plugins for Claude Code — code review and task delegation.",
+    "version": "1.2.0"
   },
   "plugins": [
     {
@@ -16,6 +16,24 @@
         "name": "OpenAI"
       },
       "source": "./plugins/codex"
+    },
+    {
+      "name": "gemini",
+      "description": "Use Gemini CLI from Claude Code for code review.",
+      "version": "0.1.0",
+      "author": {
+        "name": "trunkszi"
+      },
+      "source": "./plugins/gemini"
+    },
+    {
+      "name": "auggie",
+      "description": "Use Auggie CLI from Claude Code for code review.",
+      "version": "0.1.0",
+      "author": {
+        "name": "trunkszi"
+      },
+      "source": "./plugins/auggie"
     }
   ]
 }
