@@ -11,6 +11,20 @@ import { parseBrokerEndpoint } from "./lib/broker-endpoint.mjs";
 
 const STREAMING_METHODS = new Set(["turn/start", "review/start", "thread/compact/start"]);
 
+const DEFAULT_IDLE_TIMEOUT_MS = 10 * 60 * 1000;
+
+function resolveIdleTimeoutMs() {
+  const raw = process.env.CODEX_BROKER_IDLE_TIMEOUT_MS;
+  if (!raw) {
+    return DEFAULT_IDLE_TIMEOUT_MS;
+  }
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    return DEFAULT_IDLE_TIMEOUT_MS;
+  }
+  return parsed;
+}
+
 function buildStreamThreadIds(method, params, result) {
   const threadIds = new Set();
   if (params?.threadId) {
@@ -70,6 +84,31 @@ async function main() {
   let activeStreamSocket = null;
   let activeStreamThreadIds = null;
   const sockets = new Set();
+  const idleTimeoutMs = resolveIdleTimeoutMs();
+  let idleTimer = null;
+  let shuttingDown = false;
+
+  function armIdleTimer(server) {
+    if (idleTimer || idleTimeoutMs === 0 || shuttingDown) {
+      return;
+    }
+    idleTimer = setTimeout(async () => {
+      idleTimer = null;
+      if (sockets.size > 0 || shuttingDown) {
+        return;
+      }
+      await shutdown(server);
+      process.exit(0);
+    }, idleTimeoutMs);
+    idleTimer.unref?.();
+  }
+
+  function disarmIdleTimer() {
+    if (idleTimer) {
+      clearTimeout(idleTimer);
+      idleTimer = null;
+    }
+  }
 
   function clearSocketOwnership(socket) {
     if (activeRequestSocket === socket) {
@@ -100,6 +139,11 @@ async function main() {
   }
 
   async function shutdown(server) {
+    if (shuttingDown) {
+      return;
+    }
+    shuttingDown = true;
+    disarmIdleTimer();
     for (const socket of sockets) {
       socket.end();
     }
@@ -111,12 +155,25 @@ async function main() {
     if (pidFile && fs.existsSync(pidFile)) {
       fs.unlinkSync(pidFile);
     }
+    const sessionDir = pidFile
+      ? path.dirname(pidFile)
+      : listenTarget.kind === "unix"
+        ? path.dirname(listenTarget.path)
+        : null;
+    if (sessionDir && fs.existsSync(sessionDir)) {
+      try {
+        fs.rmdirSync(sessionDir);
+      } catch {
+        // Non-empty or already-removed session directories are left as-is.
+      }
+    }
   }
 
   appClient.setNotificationHandler(routeNotification);
 
   const server = net.createServer((socket) => {
     sockets.add(socket);
+    disarmIdleTimer();
     socket.setEncoding("utf8");
     let buffer = "";
 
@@ -225,11 +282,17 @@ async function main() {
     socket.on("close", () => {
       sockets.delete(socket);
       clearSocketOwnership(socket);
+      if (sockets.size === 0) {
+        armIdleTimer(server);
+      }
     });
 
     socket.on("error", () => {
       sockets.delete(socket);
       clearSocketOwnership(socket);
+      if (sockets.size === 0) {
+        armIdleTimer(server);
+      }
     });
   });
 
@@ -243,7 +306,9 @@ async function main() {
     process.exit(0);
   });
 
-  server.listen(listenTarget.path);
+  server.listen(listenTarget.path, () => {
+    armIdleTimer(server);
+  });
 }
 
 main().catch((error) => {

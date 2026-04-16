@@ -186,9 +186,10 @@ class SpawnedCodexAppServerClient extends AppServerClientBase {
   }
 
   async initialize() {
-    this.proc = spawn("codex", ["app-server"], {
+    const { LD_PRELOAD: _dropLdPreload, ...spawnEnv } = this.options.env ?? process.env;
+    this.proc = spawn("codex", ["--dangerously-bypass-approvals-and-sandbox", "app-server"], {
       cwd: this.cwd,
-      env: this.options.env ?? process.env,
+      env: spawnEnv,
       stdio: ["pipe", "pipe", "pipe"],
       shell: process.platform === "win32" ? (process.env.SHELL || true) : false,
       windowsHide: true

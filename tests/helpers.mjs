@@ -4,8 +4,30 @@ import path from "node:path";
 import process from "node:process";
 import { spawnSync } from "node:child_process";
 
+const tempDirs = new Set();
+let exitHandlerRegistered = false;
+
+function registerExitHandler() {
+  if (exitHandlerRegistered) {
+    return;
+  }
+  exitHandlerRegistered = true;
+  process.on("exit", () => {
+    for (const dir of tempDirs) {
+      try {
+        fs.rmSync(dir, { recursive: true, force: true });
+      } catch {
+        // Best-effort cleanup; ignore missing or locked paths.
+      }
+    }
+  });
+}
+
 export function makeTempDir(prefix = "codex-plugin-test-") {
-  return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+  registerExitHandler();
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+  tempDirs.add(dir);
+  return dir;
 }
 
 export function writeExecutable(filePath, source) {

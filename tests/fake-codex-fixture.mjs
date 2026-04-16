@@ -232,6 +232,9 @@ function taskPayload(prompt, resume) {
 }
 
 const args = process.argv.slice(2);
+if (args[0] === "--dangerously-bypass-approvals-and-sandbox") {
+  args.shift();
+}
 if (args[0] === "--version") {
   console.log("codex-cli test");
   process.exit(0);
@@ -259,6 +262,9 @@ bootState.appServerStarts = (bootState.appServerStarts || 0) + 1;
 saveState(bootState);
 
 const rl = readline.createInterface({ input: process.stdin });
+rl.on("close", () => {
+  process.exit(0);
+});
 rl.on("line", (line) => {
   if (!line.trim()) {
     return;
